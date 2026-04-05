@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  Stream<User?> get userStream => _auth.authStateChanges();
+
   //1. Sign up
   Future<User?> signUp(String email, String password) async {
     try {
@@ -29,5 +31,10 @@ class AuthService {
       print('Login error: $e');
       return null;
     }
+  }
+
+  // 3. Log out
+  Future<void> logOut() async{
+    await _auth.signOut();
   }
 }
