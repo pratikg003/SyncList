@@ -25,4 +25,9 @@ class DatabaseService {
       print("Failed to update task: $e");
     }
   }
+
+  // 3. The Live Stream(Data Pipe)
+  Stream<QuerySnapshot> get tasksStream {
+    return _taskCollection.orderBy('timestamp', descending: true).snapshots();
+  }
 }
