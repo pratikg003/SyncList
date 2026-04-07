@@ -5,12 +5,13 @@ class DatabaseService {
       .collection('tasks');
 
   // 1. add a new task
-  Future<void> addTask(String title) async {
+  Future<void> addTask(String title, String syncCode) async {
     try {
       await _taskCollection.add({
         'title': title,
         'isCompleted': false,
         'timestamp': FieldValue.serverTimestamp(),
+        'syncCode': syncCode,
       });
     } catch (e) {
       print("Failed to add task: $e");
@@ -27,7 +28,10 @@ class DatabaseService {
   }
 
   // 3. The Live Stream(Data Pipe)
-  Stream<QuerySnapshot> get tasksStream {
-    return _taskCollection.orderBy('timestamp', descending: true).snapshots();
+  Stream<QuerySnapshot> tasksStream(String syncCode) {
+    return _taskCollection
+        .where('syncCode', isEqualTo: syncCode)
+        .orderBy('timestamp', descending: true)
+        .snapshots();
   }
 }

@@ -12,11 +12,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _taskController = TextEditingController();
+  final TextEditingController _syncCodeController = TextEditingController(text: 'my-secret-room');
 
   @override
   void dispose() {
     super.dispose();
     _taskController.dispose();
+    _syncCodeController.dispose();
   }
 
   @override
@@ -39,6 +41,12 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('You are successfully logged in!'),
             const SizedBox(height: 28),
 
+            // SYNC CODE
+            TextField(
+              decoration: InputDecoration(hintText: 'Enter room code'),
+              controller: _syncCodeController,
+            ),
+
             // ADD A TASK
             Row(
               children: [
@@ -52,7 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ElevatedButton(
                   onPressed: () {
                     final task = _taskController.text.trim();
-                    DatabaseService().addTask(task);
+                    final syncCode = _syncCodeController.text.trim();
+                    DatabaseService().addTask(task, syncCode);
                     _taskController.clear();
                   },
                   child: Text('Add'),
@@ -64,22 +73,31 @@ class _HomeScreenState extends State<HomeScreen> {
             //  BUILDING THE LIST
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: DatabaseService().tasksStream,
+                stream: DatabaseService().tasksStream(
+                  _syncCodeController.text.trim(),
+                ),
                 builder: (context, snapshot) {
-                  // 1. handle waiting state
+                  // 1. Handle waiting state
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  // 2. Handle empty lists
+                  // 2. CATCH THE ERROR (ADD THIS BLOCK)
+                  if (snapshot.hasError) {
+                    // This prints the exact error (and the magic link!) to your IDE console
+                    print("🔥 FIREBASE ERROR: ${snapshot.error}");
+                    return const Center(
+                      child: Text('An error occurred. Check the console!'),
+                    );
+                  }
+
+                  // 3. Handle empty lists
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const Center(child: Text('No tasks yet'));
                   }
 
-                  // 3. Extract the list of documents
-                  final tasks = snapshot.data!.docs;
-
                   // 4. Build the list
+                  final tasks = snapshot.data!.docs;
                   return ListView.builder(
                     itemCount: tasks.length,
                     itemBuilder: (context, index) {
