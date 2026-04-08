@@ -34,4 +34,20 @@ class DatabaseService {
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
+
+  // 4. Fetch a user's profile data (One-Time Read)
+  Future<String?> getLastActiveRoom(String uid) async {
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (doc.exists) {
+        return doc.get('lastActiveRoom');
+      }
+    } catch (e) {
+      print("Error fetching profile: $e");
+    }
+    return null;
+  }
 }

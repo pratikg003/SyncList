@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
@@ -12,6 +13,14 @@ class AuthService {
         email: email,
         password: password,
       );
+
+      String uid = credential.user!.uid;
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'email': email,
+        'joinedRooms': [],
+        'lastActiveRoom': 'general',
+      });
+
       return credential.user;
     } catch (e) {
       print('Sign up error: $e');
@@ -34,7 +43,7 @@ class AuthService {
   }
 
   // 3. Log out
-  Future<void> logOut() async{
+  Future<void> logOut() async {
     await _auth.signOut();
   }
 }
