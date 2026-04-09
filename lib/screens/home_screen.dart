@@ -15,7 +15,49 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _taskController = TextEditingController();
   String? activeRoom;
+  List? joinedRooms;
   bool isLoading = true;
+
+  Future<void> _fetchUserProfile() async {
+    final user = Provider.of<User?>(context, listen: false);
+
+    if (user != null) {
+      String? room = await DatabaseService().getLastActiveRoom(user.uid);
+      List? roomsList = await DatabaseService().getJoinedRooms(user.uid);
+
+      setState(() {
+        activeRoom = room ?? 'general';
+        joinedRooms = roomsList;
+        isLoading = false;
+      });
+    }
+  }
+
+  void _switchRoom(String newRoom) {
+    setState(() {
+      activeRoom = newRoom;
+    });
+    final user = Provider.of<User?>(context, listen: false);
+    if (user != null) {
+      DatabaseService().updateActiveRoom(user.uid, newRoom);
+    }
+  }
+
+  void _addNewRoom(String newRoom) {
+    // 1. Update local UI
+    setState(() {
+      activeRoom = newRoom;
+      if (joinedRooms != null && !joinedRooms!.contains(newRoom)) {
+        joinedRooms!.add(newRoom);
+      }
+    });
+
+    // 2. Update Firebase
+    final user = Provider.of<User?>(context, listen: false);
+    if (user != null) {
+      DatabaseService().joinOrCreateRoom(user.uid, newRoom);
+    }
+  }
 
   @override
   void initState() {
@@ -29,19 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _taskController.dispose();
   }
 
-  Future<void> _fetchUserProfile() async {
-    final user = Provider.of<User?>(context, listen: false);
-
-    if (user != null) {
-      String? room = await DatabaseService().getLastActiveRoom(user.uid);
-
-      setState(() {
-        activeRoom = room ?? 'general';
-        isLoading = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final AuthService authService = AuthService();
@@ -53,6 +82,66 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(onPressed: authService.logOut, icon: Icon(Icons.logout)),
         ],
       ),
+
+      // D R A W E R
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            DrawerHeader(
+              child: Text(
+                'Current Room:\n$activeRoom',
+                style: TextStyle(color: Colors.blue, fontSize: 24),
+              ),
+            ),
+
+            if (joinedRooms != null && joinedRooms!.isNotEmpty)
+              ...joinedRooms!.map(
+                (room) => ListTile(
+                  title: Text(room),
+                  leading: const Icon(Icons.meeting_room),
+                  selected: room == activeRoom,
+                  onTap: () {
+                    _switchRoom(room);
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+            const Divider(),
+
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('Join/Create Room'),
+              onTap: () {
+                Navigator.pop(context);
+
+                showDialog(
+                  context: context,
+                  builder: (context) {
+                    final TextEditingController roomController =
+                        TextEditingController();
+                    return AlertDialog(
+                      title: Text('Enter Room Name:'),
+                      content: TextField(controller: roomController),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            // Grab the text, switch the room, and close the dialog
+                            if (roomController.text.isEmpty) return;
+                            _addNewRoom(roomController.text.trim());
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Go'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+
       body: isLoading
           ? Center(child: CircularProgressIndicator())
           : Padding(
@@ -127,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   ),
-                  SizedBox(height: 24,),
+                  SizedBox(height: 24),
                   // ADD A TASK
                   Row(
                     children: [
@@ -141,6 +230,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ElevatedButton(
                         onPressed: () {
                           final task = _taskController.text.trim();
+                          if (task.isEmpty) return;
+
                           DatabaseService().addTask(task, activeRoom!);
                           _taskController.clear();
                         },

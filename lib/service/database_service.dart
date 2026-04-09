@@ -50,4 +50,43 @@ class DatabaseService {
     }
     return null;
   }
+
+  // Update a user's active room in their profile
+  Future<void> updateActiveRoom(String uid, String newRoom) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'lastActiveRoom': newRoom,
+      });
+    } catch (e) {
+      print("Error updating profile: $e");
+    }
+  }
+
+  // Fetch a user's list of joined rooms
+  Future<List?> getJoinedRooms(String uid) async {
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (doc.exists) {
+        return doc.get('joinedRooms');
+      }
+    } catch (e) {
+      print("Error fetching profile: $e");
+    }
+    return null;
+  }
+
+  // Add a room to the user's list AND set it as active
+  Future<void> joinOrCreateRoom(String uid, String roomName) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'joinedRooms': FieldValue.arrayUnion([roomName]),
+        'lastActiveRoom': roomName,
+      });
+    } catch (e) {
+      print("Error joining room: $e");
+    }
+  }
 }
