@@ -198,17 +198,39 @@ class _HomeScreenState extends State<HomeScreen> {
                             bool isCompleted = taskDoc['isCompleted'];
                             String docId = taskDoc.id;
 
-                            return ListTile(
-                              title: Text(title),
-                              leading: Checkbox(
-                                value: isCompleted,
-                                onChanged: (newValue) {
-                                  // Call the toggle function you wrote on Day 5!
-                                  DatabaseService().toggleTaskState(
-                                    docId,
-                                    isCompleted,
-                                  );
-                                },
+                            String creatorEmail =
+                                taskDoc['creatorEmail'] ?? 'Unknown User';
+
+                            return Dismissible(
+                              key: Key(docId),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                color: Colors.red,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20.0),
+                                child: const Icon(
+                                  Icons.delete,
+                                  color: Colors.white,
+                                ),
+                              ),
+
+                              onDismissed: (direction) {
+                                DatabaseService().deleteTask(docId);
+                              },
+
+                              child: ListTile(
+                                title: Text(title),
+                                subtitle: Text("Added by: $creatorEmail"),
+                                leading: Checkbox(
+                                  value: isCompleted,
+                                  onChanged: (newValue) {
+                                    // Call the toggle function you wrote on Day 5!
+                                    DatabaseService().toggleTaskState(
+                                      docId,
+                                      isCompleted,
+                                    );
+                                  },
+                                ),
                               ),
                             );
                           },
@@ -230,10 +252,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       ElevatedButton(
                         onPressed: () {
                           final task = _taskController.text.trim();
-                          if (task.isEmpty) return;
-
-                          DatabaseService().addTask(task, activeRoom!);
-                          _taskController.clear();
+                          final user = Provider.of<User?>(
+                            context,
+                            listen: false,
+                          );
+                          if (user != null && user.email != null) {
+                            DatabaseService().addTask(
+                              task,
+                              activeRoom!,
+                              user.email!,
+                            );
+                            _taskController.clear();
+                          }
                         },
                         child: Text('Add'),
                       ),

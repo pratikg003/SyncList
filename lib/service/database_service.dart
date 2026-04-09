@@ -5,13 +5,14 @@ class DatabaseService {
       .collection('tasks');
 
   // 1. add a new task
-  Future<void> addTask(String title, String syncCode) async {
+  Future<void> addTask(String title, String syncCode, String creatorEmail) async {
     try {
       await _taskCollection.add({
         'title': title,
         'isCompleted': false,
         'timestamp': FieldValue.serverTimestamp(),
         'syncCode': syncCode,
+        'creatorEmail': creatorEmail,
       });
     } catch (e) {
       print("Failed to add task: $e");
@@ -87,6 +88,15 @@ class DatabaseService {
       });
     } catch (e) {
       print("Error joining room: $e");
+    }
+  }
+
+  // Delete a specific task
+  Future<void> deleteTask(String docId) async {
+    try {
+      await _taskCollection.doc(docId).delete();
+    } catch (e) {
+      print("Error deleting task: $e");
     }
   }
 }
