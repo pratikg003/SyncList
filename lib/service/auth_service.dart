@@ -17,7 +17,7 @@ class AuthService {
       String uid = credential.user!.uid;
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'email': email,
-        'joinedRooms': [],
+        'joinedRooms': ['general'],
         'lastActiveRoom': 'general',
       });
 

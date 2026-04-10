@@ -5,7 +5,11 @@ class DatabaseService {
       .collection('tasks');
 
   // 1. add a new task
-  Future<void> addTask(String title, String syncCode, String creatorEmail) async {
+  Future<void> addTask(
+    String title,
+    String syncCode,
+    String creatorEmail,
+  ) async {
     try {
       await _taskCollection.add({
         'title': title,
@@ -97,6 +101,26 @@ class DatabaseService {
       await _taskCollection.doc(docId).delete();
     } catch (e) {
       print("Error deleting task: $e");
+    }
+  }
+
+  // Clear all completed tasks in a specific room
+  Future<void> clearCompletedTasks(String syncCode) async {
+    try {
+      var snapshot = await _taskCollection
+          .where('syncCode', isEqualTo: syncCode)
+          .where('isCompleted', isEqualTo: true)
+          .get();
+
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+    } catch (e) {
+      print("Error clearing tasks: $e");
     }
   }
 }

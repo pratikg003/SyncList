@@ -79,6 +79,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text('SyncList'),
         actions: [
+          // L O G O U T
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () {
+              if (activeRoom != null) {
+                DatabaseService().clearCompletedTasks(activeRoom!);
+              }
+            },
+          ),
+
+          // Batch delete
           IconButton(onPressed: authService.logOut, icon: Icon(Icons.logout)),
         ],
       ),
@@ -87,9 +98,10 @@ class _HomeScreenState extends State<HomeScreen> {
       drawer: Drawer(
         child: ListView(
           children: [
-            DrawerHeader(
+            Padding(
+              padding: EdgeInsets.all(20),
               child: Text(
-                'Current Room:\n$activeRoom',
+                'Joined Rooms:',
                 style: TextStyle(color: Colors.blue, fontSize: 24),
               ),
             ),
@@ -98,7 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ...joinedRooms!.map(
                 (room) => ListTile(
                   title: Text(room),
-                  leading: const Icon(Icons.meeting_room),
+                  leading: const Icon(Icons.house_outlined),
                   selected: room == activeRoom,
                   onTap: () {
                     _switchRoom(room);
@@ -189,51 +201,76 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         // 4. Build the list
                         final tasks = snapshot.data!.docs;
-                        return ListView.builder(
-                          itemCount: tasks.length,
-                          itemBuilder: (context, index) {
-                            var taskDoc = tasks[index];
 
-                            String title = taskDoc['title'];
-                            bool isCompleted = taskDoc['isCompleted'];
-                            String docId = taskDoc.id;
+                        final bool isOffline =
+                            snapshot.data!.metadata.isFromCache;
 
-                            String creatorEmail =
-                                taskDoc['creatorEmail'] ?? 'Unknown User';
-
-                            return Dismissible(
-                              key: Key(docId),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                color: Colors.red,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20.0),
-                                child: const Icon(
-                                  Icons.delete,
-                                  color: Colors.white,
+                        return Column(
+                          children: [
+                            // Show a little orange banner if we are reading from the local cache
+                            if (isOffline)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8.0),
+                                child: Text(
+                                  '⚡ Working Offline - Changes will sync later',
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
 
-                              onDismissed: (direction) {
-                                DatabaseService().deleteTask(docId);
-                              },
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: tasks.length,
+                                itemBuilder: (context, index) {
+                                  var taskDoc = tasks[index];
 
-                              child: ListTile(
-                                title: Text(title),
-                                subtitle: Text("Added by: $creatorEmail"),
-                                leading: Checkbox(
-                                  value: isCompleted,
-                                  onChanged: (newValue) {
-                                    // Call the toggle function you wrote on Day 5!
-                                    DatabaseService().toggleTaskState(
-                                      docId,
-                                      isCompleted,
-                                    );
-                                  },
-                                ),
+                                  String title = taskDoc['title'];
+                                  bool isCompleted = taskDoc['isCompleted'];
+                                  String docId = taskDoc.id;
+
+                                  String creatorEmail =
+                                      taskDoc['creatorEmail'] ?? 'Unknown User';
+
+                                  return Dismissible(
+                                    key: Key(docId),
+                                    direction: DismissDirection.endToStart,
+                                    background: Container(
+                                      color: Colors.red,
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(
+                                        right: 20.0,
+                                      ),
+                                      child: const Icon(
+                                        Icons.delete,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+
+                                    onDismissed: (direction) {
+                                      DatabaseService().deleteTask(docId);
+                                    },
+
+                                    child: ListTile(
+                                      title: Text(title),
+                                      subtitle: Text("Added by: $creatorEmail"),
+                                      leading: Checkbox(
+                                        value: isCompleted,
+                                        onChanged: (newValue) {
+                                          // Call the toggle function you wrote on Day 5!
+                                          DatabaseService().toggleTaskState(
+                                            docId,
+                                            isCompleted,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
+                            ),
+                          ],
                         );
                       },
                     ),
@@ -252,6 +289,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ElevatedButton(
                         onPressed: () {
                           final task = _taskController.text.trim();
+                          if (task.isEmpty) return;
+
                           final user = Provider.of<User?>(
                             context,
                             listen: false,
