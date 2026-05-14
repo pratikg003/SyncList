@@ -1,69 +1,19 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sync_list/providers/auth_provider.dart';
+import 'package:sync_list/providers/task_provider.dart';
 import 'package:sync_list/service/auth_service.dart';
 import 'package:sync_list/service/database_service.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   final TextEditingController _taskController = TextEditingController();
-  String? activeRoom;
-  List? joinedRooms;
-  bool isLoading = true;
-
-  Future<void> _fetchUserProfile() async {
-    final user = Provider.of<User?>(context, listen: false);
-
-    if (user != null) {
-      String? room = await DatabaseService().getLastActiveRoom(user.uid);
-      List? roomsList = await DatabaseService().getJoinedRooms(user.uid);
-
-      setState(() {
-        activeRoom = room ?? 'general';
-        joinedRooms = roomsList;
-        isLoading = false;
-      });
-    }
-  }
-
-  void _switchRoom(String newRoom) {
-    setState(() {
-      activeRoom = newRoom;
-    });
-    final user = Provider.of<User?>(context, listen: false);
-    if (user != null) {
-      DatabaseService().updateActiveRoom(user.uid, newRoom);
-    }
-  }
-
-  void _addNewRoom(String newRoom) {
-    // 1. Update local UI
-    setState(() {
-      activeRoom = newRoom;
-      if (joinedRooms != null && !joinedRooms!.contains(newRoom)) {
-        joinedRooms!.add(newRoom);
-      }
-    });
-
-    // 2. Update Firebase
-    final user = Provider.of<User?>(context, listen: false);
-    if (user != null) {
-      DatabaseService().joinOrCreateRoom(user.uid, newRoom);
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchUserProfile();
-  }
 
   @override
   void dispose() {
@@ -75,6 +25,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final AuthService authService = AuthService();
 
+    final activeRoom = ref.watch(activeRoomProvider);
+
+    final userProfileAsync = ref.watch(userProfileProvider);
+
+    final tasksAsync = ref.watch(taskStreamProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('SyncList'),
@@ -83,9 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: () {
-              if (activeRoom != null) {
-                DatabaseService().clearCompletedTasks(activeRoom!);
-              }
+              DatabaseService().clearCompletedTasks(activeRoom);
             },
           ),
 
@@ -98,48 +52,67 @@ class _HomeScreenState extends State<HomeScreen> {
       drawer: Drawer(
         child: ListView(
           children: [
-            Padding(
-              padding: EdgeInsets.all(20),
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Colors.blue),
               child: Text(
-                'Joined Rooms:',
-                style: TextStyle(color: Colors.blue, fontSize: 24),
+                'Current Room:\n$activeRoom',
+                style: const TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
 
-            if (joinedRooms != null && joinedRooms!.isNotEmpty)
-              ...joinedRooms!.map(
-                (room) => ListTile(
-                  title: Text(room),
-                  leading: const Icon(Icons.house_outlined),
-                  selected: room == activeRoom,
-                  onTap: () {
-                    _switchRoom(room);
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            const Divider(),
+            userProfileAsync.when(
+              loading: () => const CircularProgressIndicator(),
+              error: (err, stack) => Text('Error: $err'),
+              data: (profile) {
+                final joinedRooms =
+                    profile?['joinedRooms'] as List<dynamic>? ?? [];
 
+                return Column(
+                  children: [
+                    ...joinedRooms.map(
+                      (room) => ListTile(
+                        title: Text(room),
+                        leading: const Icon(Icons.home),
+                        selected: room == activeRoom,
+                        onTap: () {
+                          ref.read(activeRoomProvider.notifier).state = room;
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const Divider(),
             ListTile(
-              leading: const Icon(Icons.swap_horiz),
-              title: const Text('Join/Create Room'),
+              leading: const Icon(Icons.add),
+              title: const Text("Create/Join New Room"),
               onTap: () {
                 Navigator.pop(context);
-
                 showDialog(
                   context: context,
                   builder: (context) {
-                    final TextEditingController roomController =
-                        TextEditingController();
+                    final roomController = TextEditingController();
                     return AlertDialog(
-                      title: Text('Enter Room Name:'),
+                      title: const Text('Enter Room Name:'),
                       content: TextField(controller: roomController),
                       actions: [
                         TextButton(
                           onPressed: () {
-                            // Grab the text, switch the room, and close the dialog
-                            if (roomController.text.isEmpty) return;
-                            _addNewRoom(roomController.text.trim());
+                            final newRoom = roomController.text.trim();
+
+                            ref.read(activeRoomProvider.notifier).state =
+                                newRoom;
+
+                            final user = ref.read(authStateProvider).value;
+
+                            if (user != null) {
+                              DatabaseService().joinOrCreateRoom(
+                                user.uid,
+                                newRoom,
+                              );
+                            }
                             Navigator.pop(context);
                           },
                           child: const Text('Go'),
@@ -154,163 +127,94 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // LOGIN TEXT
-                  // const Text('You are successfully logged in!'),
-                  // const SizedBox(height: 28),
-
-                  // // SYNC CODE
-                  // TextField(
-                  //   decoration: InputDecoration(hintText: 'Enter room code'),
-                  // ),
-                  // const SizedBox(height: 28),
-
-                  //  BUILDING THE LIST
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: DatabaseService().tasksStream(activeRoom!),
-                      builder: (context, snapshot) {
-                        // 1. Handle waiting state
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        // 2. CATCH THE ERROR
-                        if (snapshot.hasError) {
-                          print("FIREBASE ERROR: ${snapshot.error}");
-                          return const Center(
-                            child: Text(
-                              'An error occurred. Check the console!',
-                            ),
-                          );
-                        }
-
-                        // 3. Handle empty lists
-                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                          return const Center(child: Text('No tasks yet'));
-                        }
-
-                        // 4. Build the list
-                        final tasks = snapshot.data!.docs;
-
-                        final bool isOffline =
-                            snapshot.data!.metadata.isFromCache;
-
-                        return Column(
-                          children: [
-                            // Show a little orange banner if we are reading from the local cache
-                            if (isOffline)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 8.0),
-                                child: Text(
-                                  '⚡ Working Offline - Changes will sync later',
-                                  style: TextStyle(
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: tasks.length,
-                                itemBuilder: (context, index) {
-                                  var taskDoc = tasks[index];
-
-                                  String title = taskDoc['title'];
-                                  bool isCompleted = taskDoc['isCompleted'];
-                                  String docId = taskDoc.id;
-
-                                  String creatorEmail =
-                                      taskDoc['creatorEmail'] ?? 'Unknown User';
-
-                                  return Dismissible(
-                                    key: Key(docId),
-                                    direction: DismissDirection.endToStart,
-                                    background: Container(
-                                      color: Colors.red,
-                                      alignment: Alignment.centerRight,
-                                      padding: const EdgeInsets.only(
-                                        right: 20.0,
-                                      ),
-                                      child: const Icon(
-                                        Icons.delete,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-
-                                    onDismissed: (direction) {
-                                      DatabaseService().deleteTask(docId);
-                                    },
-
-                                    child: ListTile(
-                                      title: Text(title),
-                                      subtitle: Text("Added by: $creatorEmail"),
-                                      leading: Checkbox(
-                                        value: isCompleted,
-                                        onChanged: (newValue) {
-                                          // Call the toggle function you wrote on Day 5!
-                                          DatabaseService().toggleTaskState(
-                                            docId,
-                                            isCompleted,
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _taskController,
+                    decoration: InputDecoration(hintText: 'Add a Task'),
                   ),
-                  SizedBox(height: 24),
-                  // ADD A TASK
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: 'Add a task'),
-                          controller: _taskController,
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    final taskTitle = _taskController.text.trim();
+                    if (taskTitle.isEmpty) return;
+
+                    final user = ref.read(authStateProvider).value;
+
+                    if (user != null && user.email != null) {
+                      DatabaseService().addTask(
+                        taskTitle,
+                        activeRoom,
+                        user.email!,
+                      );
+                      _taskController.clear();
+                    }
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            ),
+            SizedBox(height: 28),
+
+            Expanded(
+              child: tasksAsync.when(
+                error: (err, stack) => Center(child: Text('Error: $err')),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                data: (tasks) {
+                  if (tasks.isEmpty) {
+                    return const Center(
+                      child: Text('No tasks yet in this room'),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: tasks.length,
+                    itemBuilder: (context, index) {
+                      final task = tasks[index];
+
+                      return Dismissible(
+                        key: Key(task.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          color: Colors.red,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20.0),
+                          child: const Icon(Icons.delete, color: Colors.white),
                         ),
-                      ),
-                      SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          final task = _taskController.text.trim();
-                          if (task.isEmpty) return;
-
-                          final user = Provider.of<User?>(
-                            context,
-                            listen: false,
-                          );
-                          if (user != null && user.email != null) {
-                            DatabaseService().addTask(
-                              task,
-                              activeRoom!,
-                              user.email!,
-                            );
-                            _taskController.clear();
-                          }
+                        onDismissed: (direction) {
+                          DatabaseService().deleteTask(task.id);
                         },
-                        child: Text('Add'),
-                      ),
-                    ],
-                  ),
-                ],
+                        child: ListTile(
+                          title: Text(task.title), // Type-safe!
+                          subtitle: Text(
+                            'Added by ${task.creatorEmail}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          leading: Checkbox(
+                            value: task.isCompleted,
+                            onChanged: (newValue) {
+                              DatabaseService().toggleTaskState(
+                                task.id,
+                                task.isCompleted,
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

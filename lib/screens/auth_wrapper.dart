@@ -1,20 +1,30 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sync_list/providers/auth_provider.dart';
 import 'package:sync_list/screens/home_screen.dart';
 import 'package:sync_list/screens/login_screen.dart';
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final user = Provider.of<User?>(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
 
-    if (user == null) {
-      return const LoginScreen();
-    }
-
-    return const HomeScreen();
+    return authState.when(
+      data: (user) {
+        if (user != null) {
+          return HomeScreen();
+        } else {
+          return LoginScreen();
+        }
+      },
+      error: (error, StackTrace) {
+        return Scaffold(body: Center(child: Text("Error: $error")));
+      },
+      loading: () {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      },
+    );
   }
 }
