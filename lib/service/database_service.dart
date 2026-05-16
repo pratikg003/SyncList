@@ -86,10 +86,10 @@ class DatabaseService {
   // Add a room to the user's list AND set it as active
   Future<void> joinOrCreateRoom(String uid, String roomName) async {
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'joinedRooms': FieldValue.arrayUnion([roomName]),
         'lastActiveRoom': roomName,
-      });
+      }, SetOptions(merge: true));
     } catch (e) {
       print("Error joining room: $e");
     }

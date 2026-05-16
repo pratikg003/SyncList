@@ -17,7 +17,7 @@ final userProfileProvider = StreamProvider<Map<String, dynamic>?>((ref) {
       .map((snapshot) => snapshot.data());
 });
 
-final taskStreamProvider = StreamProvider<List<TaskModel>>((ref) {
+final tasksStreamProvider = StreamProvider<List<TaskModel>>((ref) {
   final currentRoom = ref.watch(activeRoomProvider);
 
   return FirebaseFirestore.instance
