@@ -31,3 +31,19 @@ final tasksStreamProvider = StreamProvider<List<TaskModel>>((ref) {
         }).toList();
       });
 });
+
+final roomMembersProvider = StreamProvider<List<String>>((ref) {
+  final currentRoom = ref.watch(activeRoomProvider);
+
+  return FirebaseFirestore.instance
+      .collection('users')
+      .where('joinedRooms', arrayContains: currentRoom) 
+      .snapshots()
+      .map((snapshot) {
+        return snapshot.docs
+            .map((doc) => doc.data()['email'] as String?)
+            .where((email) => email != null)
+            .cast<String>()
+            .toList();
+      });
+});

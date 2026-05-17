@@ -8,8 +8,9 @@ class DatabaseService {
   Future<void> addTask(
     String title,
     String syncCode,
-    String creatorEmail,
-  ) async {
+    String creatorEmail, {
+    String? assignedTo,
+  }) async {
     try {
       await _taskCollection.add({
         'title': title,
@@ -17,6 +18,9 @@ class DatabaseService {
         'timestamp': FieldValue.serverTimestamp(),
         'syncCode': syncCode,
         'creatorEmail': creatorEmail,
+        'assignedTo': assignedTo,
+        'completedBy': null,
+        'completedAt': null,
       });
     } catch (e) {
       print("Failed to add task: $e");
@@ -24,11 +28,21 @@ class DatabaseService {
   }
 
   // 2. Update/toggle task
-  Future<void> toggleTaskState(String docId, bool currentState) async {
+  Future<void> toggleTaskState(
+    String docId,
+    bool currentStatus,
+    String currentUserEmail,
+  ) async {
     try {
-      await _taskCollection.doc(docId).update({'isCompleted': !currentState});
+      final isNowCompleted = !currentStatus;
+
+      await FirebaseFirestore.instance.collection('tasks').doc(docId).update({
+        'isCompleted': isNowCompleted,
+        'completedBy': isNowCompleted ? currentUserEmail : null,
+        'completedAt': isNowCompleted ? FieldValue.serverTimestamp() : null,
+      });
     } catch (e) {
-      print("Failed to update task: $e");
+      print("Error toggling task: $e");
     }
   }
 
@@ -121,6 +135,17 @@ class DatabaseService {
       await batch.commit();
     } catch (e) {
       print("Error clearing tasks: $e");
+    }
+  }
+
+  // Assign or unassign a task
+  Future<void> assignTask(String taskId, String? userEmail) async {
+    try {
+      await _taskCollection.doc(taskId).update({
+        'assignedTo': userEmail,
+      });
+    } catch (e) {
+      print("Error assigning task: $e");
     }
   }
 }
